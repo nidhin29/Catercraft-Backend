@@ -14,28 +14,51 @@ const uploadToS3 = async (file, folder = "uploads", generateThumbnail = false) =
     try {
         if (!file) return null;
 
-        const fileName = `${folder}/${Date.now()}-${file.originalname}`;
-        let buffer = file.buffer;
+        const root = process.env.S3_ROOT_FOLDER ? `${process.env.S3_ROOT_FOLDER}/` : "";
+        const baseFileName = `${Date.now()}-${file.originalname.replace(/\s+/g, "_")}`;
+        const cloudFrontUrl = process.env.CLOUDFRONT_URL?.trim();
+        const bucket = process.env.AWS_BUCKET_NAME;
 
-        // Thumbnail Generation if requested
-        if (generateThumbnail) {
-            buffer = await sharp(file.buffer)
-                .resize(200, 200, { fit: 'cover' })
-                .toBuffer();
-        }
-
-        const params = {
-            Bucket: process.env.AWS_BUCKET_NAME,
-            Key: fileName,
-            Body: buffer,
-            ContentType: file.mimetype,
+        const getFullUrl = (key) => {
+            if (cloudFrontUrl && cloudFrontUrl !== "your_cloudfront_domain.net") {
+                const cleanDomain = cloudFrontUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
+                return `https://${cleanDomain}/${key}`;
+            }
+            return `https://${bucket}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
         };
 
-        const command = new PutObjectCommand(params);
-        await s3Client.send(command);
+        // 1. Upload Original File
+        const originalKey = `${root}${folder}/${baseFileName}`;
+        await s3Client.send(new PutObjectCommand({
+            Bucket: bucket,
+            Key: originalKey,
+            Body: file.buffer,
+            ContentType: file.mimetype,
+        }));
 
-        // Construct public URL (assuming bucket is public or using CloudFront)
-        return `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`;
+        const originalUrl = getFullUrl(originalKey);
+
+        // 2. Handle Thumbnail if requested
+        if (generateThumbnail) {
+            const thumbnailKey = `${root}${folder}/thumb-${baseFileName}`;
+            const thumbnailBuffer = await sharp(file.buffer)
+                .resize(200, 200, { fit: 'cover' })
+                .toBuffer();
+
+            await s3Client.send(new PutObjectCommand({
+                Bucket: bucket,
+                Key: thumbnailKey,
+                Body: thumbnailBuffer,
+                ContentType: file.mimetype,
+            }));
+
+            return {
+                url: originalUrl,
+                thumbnailUrl: getFullUrl(thumbnailKey)
+            };
+        }
+
+        return originalUrl;
     } catch (error) {
         console.error("S3 Upload Error: ", error);
         throw new ApiError(500, "Error uploading file to S3");

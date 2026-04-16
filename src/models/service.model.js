@@ -7,12 +7,17 @@ const serviceSchema = new Schema(
             required: true,
             trim: true,
         },
+        service_group: {
+            type: String,
+            required: true,
+            enum: ["wedding","corporate","parties","global"]
+        },
         rate: {
             type: Number,
             required: true,
         },
         duration: {
-            type: String, // e.g. "4 hours"
+            type: String, 
         },
         description: {
             type: String,
@@ -23,7 +28,7 @@ const serviceSchema = new Schema(
             index: true
         },
         imageUrl: {
-            type: String, // AWS S3 URL
+            type: String, 
         }
     },
     {

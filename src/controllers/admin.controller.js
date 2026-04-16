@@ -1,7 +1,10 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { User } from "../models/user.model.js";
+import { Admin } from "../models/admin.model.js";
+import { Staff } from "../models/staff.model.js";
+import { Owner } from "../models/owner.model.js";
+import { Customer } from "../models/customer.model.js";
 import { Booking } from "../models/booking.model.js";
 
 const login = asyncHandler(async (req, res) => {
@@ -11,23 +14,23 @@ const login = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Email and password are required")
     }
 
-    const user = await User.findOne({ email })
+    const admin = await Admin.findOne({ email })
 
-    if (!user || user.role !== 0) {
+    if (!admin) {
         throw new ApiError(404, "Admin does not exist")
     }
 
-    const isPasswordValid = await user.isPasswordCorrect(password)
+    const isPasswordValid = await admin.isPasswordCorrect(password)
 
     if (!isPasswordValid) {
         throw new ApiError(401, "Invalid credentials")
     }
 
-    const accessToken = user.generateAccessToken()
-    const refreshToken = user.generateRefreshToken()
+    const accessToken = admin.generateAccessToken()
+    const refreshToken = admin.generateRefreshToken()
 
-    user.refreshToken = refreshToken
-    await user.save({ validateBeforeSave: false })
+    admin.refreshToken = refreshToken
+    await admin.save({ validateBeforeSave: false })
 
     const options = {
         httpOnly: true,
@@ -39,7 +42,7 @@ const login = asyncHandler(async (req, res) => {
         .cookie("accessToken", accessToken, options)
         .cookie("refreshToken", refreshToken, options)
         .json(
-            new ApiResponse(200, { user, accessToken, refreshToken }, "Admin logged in successfully")
+            new ApiResponse(200, { admin, accessToken, refreshToken }, "Admin logged in successfully")
         )
 })
 
@@ -49,12 +52,43 @@ const viewAllBookings = asyncHandler(async (req, res) => {
 })
 
 const viewAllOwners = asyncHandler(async (req, res) => {
-    const owners = await User.find({ role: 1 }).select("-password -refreshToken")
+    const owners = await Owner.find().select("-password -refreshToken")
     return res.status(200).json(new ApiResponse(200, owners, "All owners fetched"))
 })
 
+const getPendingOwners = asyncHandler(async (req, res) => {
+    const owners = await Owner.find({ verificationStatus: "pending" }).select("-password -refreshToken")
+    return res.status(200).json(new ApiResponse(200, owners, "Pending owners fetched"))
+})
+
+const updateOwnerVerification = asyncHandler(async (req, res) => {
+    const { ownerId } = req.params;
+    const { status, remarks } = req.body; // status: 'verified' or 'rejected'
+
+    if (!['verified', 'rejected'].includes(status)) {
+        throw new ApiError(400, "Invalid status. Use 'verified' or 'rejected'")
+    }
+
+    const owner = await Owner.findByIdAndUpdate(
+        ownerId,
+        {
+            $set: {
+                verificationStatus: status,
+                adminRemarks: remarks || ""
+            }
+        },
+        { new: true }
+    ).select("-password -refreshToken")
+
+    if (!owner) {
+        throw new ApiError(404, "Owner not found")
+    }
+
+    return res.status(200).json(new ApiResponse(200, owner, `Owner status updated to ${status}`))
+})
+
 const getAllCustomers = asyncHandler(async (req, res) => {
-    const customers = await User.find({ role: 3 }).select("-password -refreshToken")
+    const customers = await Customer.find().select("-password -refreshToken")
     return res.status(200).json(new ApiResponse(200, customers, "All customers fetched"))
 })
 
@@ -65,7 +99,7 @@ const deleteOwner = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Owner email is required")
     }
 
-    const deletedOwner = await User.findOneAndDelete({ email: email_id_owner, role: 1 })
+    const deletedOwner = await Owner.findOneAndDelete({ email: email_id_owner })
 
     if (!deletedOwner) {
         throw new ApiError(404, "Owner not found")
@@ -106,6 +140,8 @@ export {
     login,
     viewAllBookings,
     viewAllOwners,
+    getPendingOwners,
+    updateOwnerVerification,
     getAllCustomers,
     deleteOwner,
     getRevenueAnalytics

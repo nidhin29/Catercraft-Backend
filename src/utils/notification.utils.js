@@ -1,0 +1,55 @@
+import admin from "firebase-admin";
+import { Owner } from "../models/owner.model.js";
+import { Staff } from "../models/staff.model.js";
+
+// Initialize Firebase Admin (Wrapped in try-catch to avoid crashing if file is missing)
+try {
+    // If you haven't placed the file yet, this will fail gracefully
+    // Standard path would be src/config/serviceAccountKey.json
+    admin.initializeApp({
+        credential: admin.credential.cert("./src/config/serviceAccountKey.json")
+    });
+    console.log("✅ Firebase Admin Initialized");
+} catch (error) {
+    console.log("⚠️ Firebase Admin not initialized (Missing serviceAccountKey.json)");
+}
+
+/**
+ * Send a push notification to a specific user
+ * @param {string} userId - Database ID of the user
+ * @param {string} userType - 'Owner' or 'Staff'
+ * @param {object} payload - { title, body, data }
+ */
+const sendPushNotification = async (userId, userType, payload) => {
+    try {
+        let user;
+        if (userType === "Owner") {
+            user = await Owner.findById(userId);
+        } else if (userType === "Staff") {
+            user = await Staff.findById(userId);
+        }
+
+        if (!user || !user.fcmToken) {
+            console.log(`📡 Skipping Push: No FCM Token found for ${userType} (${userId})`);
+            return null;
+        }
+
+        const message = {
+            notification: {
+                title: payload.title,
+                body: payload.body,
+            },
+            data: payload.data || {},
+            token: user.fcmToken,
+        };
+
+        const response = await admin.messaging().send(message);
+        console.log("🔔 Push Notification Sent Successfully:", response);
+        return response;
+    } catch (error) {
+        console.error("❌ Firebase Send Error:", error);
+        return null;
+    }
+};
+
+export { sendPushNotification };

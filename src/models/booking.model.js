@@ -28,7 +28,7 @@ const bookingSchema = new Schema(
         },
         work_status: {
             type: String,
-            enum: ["Pending", "Approved", "Finished"],
+            enum: ["Pending", "Accepted", "In Kitchen", "Dispatched", "Completed", "Cancelled"],
             default: "Pending"
         },
         razorpay_order_id: {
@@ -36,7 +36,13 @@ const bookingSchema = new Schema(
         },
         razorpay_payment_id: {
             type: String,
-        }
+        },
+        assignedStaff: [
+            {
+                type: Schema.Types.ObjectId,
+                ref: "Staff"
+            }
+        ]
     },
     {
         timestamps: true

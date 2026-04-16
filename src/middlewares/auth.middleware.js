@@ -1,7 +1,10 @@
 import jwt from "jsonwebtoken"
 import { asyncHandler } from "../utils/asyncHandler.js"
 import { ApiError } from "../utils/ApiError.js"
-import { User } from "../models/user.model.js"
+import { Admin } from "../models/admin.model.js"
+import { Customer } from "../models/customer.model.js"
+import { Staff } from "../models/staff.model.js"
+import { Owner } from "../models/owner.model.js"
 
 const verifyJWT = asyncHandler(async (req, _, next) => {
     try {
@@ -14,7 +17,17 @@ const verifyJWT = asyncHandler(async (req, _, next) => {
         const decodedToken = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
 
         let user;
-        user = await User.findById(decodedToken._id).select("-password -refreshToken");
+        const role = decodedToken.role;
+
+        if (role === 0) {
+            user = await Admin.findById(decodedToken._id).select("-password -refreshToken");
+        } else if (role === 1) {
+            user = await Owner.findById(decodedToken._id).select("-password -refreshToken");
+        } else if (role === 2) {
+            user = await Staff.findById(decodedToken._id).select("-password -refreshToken");
+        } else if (role === 3) {
+            user = await Customer.findById(decodedToken._id).select("-password -refreshToken");
+        }
 
         if (!user) {
             throw new ApiError(401, "Unauthorized User");

@@ -3,6 +3,8 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { Service } from "../models/service.model.js";
 import { Booking } from "../models/booking.model.js";
+import { Owner } from "../models/owner.model.js";
+import { Staff } from "../models/staff.model.js";
 import Razorpay from "razorpay";
 
 const viewAllServices = asyncHandler(async (req, res) => {
@@ -52,7 +54,7 @@ const viewUserBookings = asyncHandler(async (req, res) => {
             { owner_email: email },
             { customer_email: email }
         ]
-    }).populate("service")
+    }).populate("service").populate("assignedStaff", "fullName profileImageThumbnail");
 
     return res.status(200).json(new ApiResponse(200, bookings, "Bookings fetched successfully"))
 })
@@ -87,9 +89,118 @@ const generateRazorpayOrder = asyncHandler(async (req, res) => {
     }
 })
 
+const updateBookingStatus = asyncHandler(async (req, res) => {
+    const { booking_id, new_status } = req.body;
+
+    if (!booking_id || !new_status) {
+        throw new ApiError(400, "Booking ID and new status are required");
+    }
+
+    const booking = await Booking.findById(booking_id);
+    if (!booking) {
+        throw new ApiError(404, "Booking not found");
+    }
+
+    // Role-Based Authorization
+    const role = req.user.role;
+    
+    if (role === 1) { // Owner
+        if (req.user.email !== booking.owner_email) {
+            throw new ApiError(403, "You are not authorized to update this booking");
+        }
+    } else if (role === 2) { // Staff
+        // Verify staff belongs to the owner of this booking
+        const bookingOwner = await Owner.findOne({ email: booking.owner_email });
+        if (!bookingOwner || req.user.owner?.toString() !== bookingOwner._id.toString()) {
+            throw new ApiError(403, "You do not have permission to manage this owner's bookings");
+        }
+    } else {
+        throw new ApiError(403, "Access denied");
+    }
+
+    // Update Status
+    booking.work_status = new_status;
+    await booking.save();
+
+    // Real-time Notification to Customer
+    const io = req.app.get("io");
+    if (io) {
+        io.emit(`booking_status_updated_${booking.customer_email}`, {
+            booking_id: booking._id,
+            status: new_status,
+            message: `Your booking status has been updated to ${new_status}`
+        });
+    }
+
+    return res.status(200).json(
+        new ApiResponse(200, booking, `Booking status successfully updated to ${new_status}`)
+    );
+});
+
+const assignStaffToBooking = asyncHandler(async (req, res) => {
+    const { booking_id, staffIds } = req.body;
+
+    if (!booking_id || !Array.isArray(staffIds)) {
+        throw new ApiError(400, "Booking ID and an array of Staff IDs are required");
+    }
+
+    const booking = await Booking.findById(booking_id);
+    if (!booking) {
+        throw new ApiError(404, "Booking not found");
+    }
+
+    // Authorization: Only the owner of this booking can assign staff
+    if (req.user.email !== booking.owner_email) {
+        throw new ApiError(403, "You are not authorized to assign staff to this booking");
+    }
+
+    // Verify all staffIds belong to this owner
+    const staffCount = await Staff.countDocuments({
+        _id: { $in: staffIds },
+        owner: req.user._id
+    });
+
+    if (staffCount !== staffIds.length) {
+        throw new ApiError(400, "One or more selected staff members do not belong to your business");
+    }
+
+    booking.assignedStaff = staffIds;
+    await booking.save();
+
+    // Notify staff via Socket.io
+    const io = req.app.get("io");
+    if (io) {
+        staffIds.forEach(staffId => {
+            io.emit(`new_assignment_${staffId}`, {
+                booking_id: booking._id,
+                message: "You have been assigned to a new task!"
+            });
+        });
+    }
+
+    return res.status(200).json(
+        new ApiResponse(200, booking, "Staff successfully assigned to booking")
+    );
+});
+
+const getStaffTasks = asyncHandler(async (req, res) => {
+    const tasks = await Booking.find({
+        assignedStaff: req.user._id
+    })
+    .populate("service")
+    .sort({ datetime: 1 });
+
+    return res.status(200).json(
+        new ApiResponse(200, tasks, "Assigned tasks fetched successfully")
+    );
+});
+
 export {
     viewAllServices,
     bookService,
     viewUserBookings,
-    generateRazorpayOrder
+    generateRazorpayOrder,
+    updateBookingStatus,
+    assignStaffToBooking,
+    getStaffTasks
 }

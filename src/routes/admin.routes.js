@@ -3,6 +3,8 @@ import {
     login, 
     viewAllBookings, 
     viewAllOwners, 
+    getPendingOwners,
+    updateOwnerVerification,
     getAllCustomers, 
     deleteOwner, 
     getRevenueAnalytics 
@@ -19,6 +21,8 @@ router.use(verifyJWT, authorizeRoles(0));
 
 router.route("/view_all_bookings").get(viewAllBookings);
 router.route("/view_all_owners").get(viewAllOwners);
+router.route("/pending-owners").get(getPendingOwners);
+router.route("/verify-owner/:ownerId").patch(updateOwnerVerification);
 router.route("/get_all_customers").get(getAllCustomers);
 router.route("/delete_owner").delete(deleteOwner);
 router.route("/analytics/revenue").get(getRevenueAnalytics);

@@ -1,5 +1,5 @@
 import dotenv from "dotenv"
-import { User } from "../models/user.model.js"
+import { Admin } from "../models/admin.model.js"
 import { connectDB } from "../db/index.js"
 
 import fs from "fs";
@@ -24,14 +24,14 @@ const seedAdmin = async () => {
         await connectDB()
         console.log("Connected to MongoDB for seeding...");
 
-        const adminExists = await User.findOne({ email: "admin@catering.com" })
+        const adminExists = await Admin.findOne({ email: "admin@catering.com" })
 
         if (adminExists) {
             console.log("Admin already exists")
             process.exit(0)
         }
 
-        const admin = new User({
+        const admin = new Admin({
             email: "admin@catering.com",
             fullName: "Platform Admin",
             password: "password123",
