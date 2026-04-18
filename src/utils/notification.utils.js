@@ -35,13 +35,37 @@ const sendPushNotification = async (userId, userType, payload) => {
         }
 
         const message = {
-            notification: {
+            data: {
+                ...payload.data,
+                click_action: "FLUTTER_NOTIFICATION_CLICK",
+            },
+            token: user.fcmToken,
+            android: {
+                priority: "high",
+            },
+            apns: {
+                payload: {
+                    aps: {
+                        contentAvailable: true,
+                    },
+                },
+            },
+        };
+
+        // If not encrypted, we can include the standard notification block
+        if (!payload.isEncrypted) {
+            message.notification = {
                 title: payload.title,
                 body: payload.body,
-            },
-            data: payload.data || {},
-            token: user.fcmToken,
-        };
+            };
+        } else {
+            // Include E2EE info in data
+            message.data.encryptedBody = payload.body;
+            message.data.isEncrypted = "true";
+            message.data.nonce = payload.nonce;
+            message.data.senderPublicKey = payload.senderPublicKey;
+            message.data.title = payload.title; // Title is safe to send plain
+        }
 
         const response = await admin.messaging().send(message);
         console.log("🔔 Push Notification Sent Successfully:", response);

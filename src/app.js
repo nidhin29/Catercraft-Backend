@@ -25,6 +25,10 @@ import staffRouter from './routes/staff.routes.js'
 import ownerRouter from './routes/owner.routes.js'
 import bookingRouter from './routes/booking.routes.js'
 import chatRouter from './routes/chat.routes.js'
+import securityRouter from './routes/security.routes.js'
+import reviewRouter from './routes/review.routes.js'
+import paymentRouter from './routes/payment.routes.js'
+import authRouter from './routes/auth.routes.js'
 
 // Route declarations
 app.use("/api/v1/customer", customerRouter)
@@ -33,6 +37,10 @@ app.use("/api/v1/owner", ownerRouter)
 app.use("/api/v1/admin", adminRouter)
 app.use("/api/v1/booking", bookingRouter)
 app.use("/api/v1/chat", chatRouter)
+app.use("/api/v1/security", securityRouter)
+app.use("/api/v1/review", reviewRouter)
+app.use("/api/v1/payment", paymentRouter)
+app.use("/api/v1/auth", authRouter)
 
 // Global Error Handler
 app.use((err, req, res, next) => {

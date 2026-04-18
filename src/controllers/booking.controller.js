@@ -5,6 +5,8 @@ import { Service } from "../models/service.model.js";
 import { Booking } from "../models/booking.model.js";
 import { Owner } from "../models/owner.model.js";
 import { Staff } from "../models/staff.model.js";
+import { sendPushNotification } from "../utils/notification.utils.js";
+import { sendEmail } from "../utils/sendEmail.js";
 import Razorpay from "razorpay";
 
 const viewAllServices = asyncHandler(async (req, res) => {
@@ -54,7 +56,7 @@ const viewUserBookings = asyncHandler(async (req, res) => {
             { owner_email: email },
             { customer_email: email }
         ]
-    }).populate("service").populate("assignedStaff", "fullName profileImageThumbnail");
+    }).populate("service").populate("assignedStaff", "fullName email role profileImageThumbnail");
 
     return res.status(200).json(new ApiResponse(200, bookings, "Bookings fetched successfully"))
 })
@@ -118,9 +120,24 @@ const updateBookingStatus = asyncHandler(async (req, res) => {
         throw new ApiError(403, "Access denied");
     }
 
-    // Update Status
-    booking.work_status = new_status;
+    // Update Status with Normalization
+    const normalizedStatus = new_status === "Accepted" ? "Approved" : new_status;
+    booking.work_status = normalizedStatus;
     await booking.save();
+
+    // Customer Email on Approval
+    if (normalizedStatus === "Approved") {
+        try {
+            const bookingForEmail = await Booking.findById(booking_id).populate("service");
+            await sendEmail({
+                email: booking.customer_email,
+                subject: "Booking Approved! | CaterCraft",
+                message: `Hello,\n\nYour booking for ${bookingForEmail.service.service_name} has been approved. You can now complete your payment through the customer dashboard.\n\nThank you for choosing CaterCraft!`
+            });
+        } catch (emailError) {
+            console.error("Non-critical Email Error:", emailError);
+        }
+    }
 
     // Real-time Notification to Customer
     const io = req.app.get("io");
@@ -167,16 +184,27 @@ const assignStaffToBooking = asyncHandler(async (req, res) => {
     booking.assignedStaff = staffIds;
     await booking.save();
 
-    // Notify staff via Socket.io
+    // Notify staff via Socket.io & Push
     const io = req.app.get("io");
-    if (io) {
-        staffIds.forEach(staffId => {
+    staffIds.forEach(staffId => {
+        // Socket.io
+        if (io) {
             io.emit(`new_assignment_${staffId}`, {
                 booking_id: booking._id,
                 message: "You have been assigned to a new task!"
             });
+        }
+        
+        // FCM Push Notification
+        sendPushNotification(staffId, "Staff", {
+            title: "New Assignment",
+            body: `You have been assigned to a new task: ${booking.service?.service_name || 'Event Assignment'}`,
+            data: { 
+                booking_id: booking._id?.toString(),
+                type: "assignment"
+            }
         });
-    }
+    });
 
     return res.status(200).json(
         new ApiResponse(200, booking, "Staff successfully assigned to booking")

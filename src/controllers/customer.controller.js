@@ -64,9 +64,17 @@ const sendOtpCustomer = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Email is required");
     }
 
-    const otp = Math.floor(100000 + Math.random() * 900000);
+    // Check if user exists OR if there's a pending registration
+    const customer = await Customer.findOne({ email });
+    const signupData = await redisClient.get(`signup:data:customer:${email}`);
 
-    await redisClient.setEx(`otp:customer:${email}`, 900, otp.toString());
+    if (!customer && !signupData) {
+        throw new ApiError(404, "No account or pending registration found for this email.");
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    await redisClient.setEx(`otp:customer:${email}`, 900, otp);
 
     try {
         await sendEmail({
@@ -93,22 +101,51 @@ const verifyOtpCustomer = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Invalid or expired OTP");
     }
 
-    let customer = await Customer.findOne({ email });
+    // 1. Check if it's a new registration finalization
+    const signupDataJson = await redisClient.get(`signup:data:customer:${email}`);
+    let customer;
 
-    if (!customer) {
-        // Handle pending registration if we implement the 'signup:data' pattern later
-        // For now, let's assume they might be creating an account via OTP directly
-        throw new ApiError(404, "Customer not found. Please register first.");
+    if (signupDataJson) {
+        const signupData = JSON.parse(signupDataJson);
+        
+        // Finalize Registration
+        customer = await Customer.create({
+            fullName: signupData.fullName,
+            email: signupData.email,
+            password: signupData.password,
+            role: 3,
+            isEmailVerified: true
+        });
+
+        // Cleanup signup data
+        await redisClient.del(`signup:data:customer:${email}`);
+    } else {
+        // 2. Handle standard email verification for existing users
+        customer = await Customer.findOne({ email });
+
+        if (!customer) {
+            throw new ApiError(404, "Customer not found and no pending registration exists.");
+        }
+
+        customer.isEmailVerified = true;
+        await customer.save();
     }
 
-    customer.isEmailVerified = true;
-    await customer.save();
-
+    // Cleanup OTP
     await redisClient.del(`otp:customer:${email}`);
 
     const { accessToken, refreshToken } = await generateAccessAndRefreshToken(customer._id);
 
-    return res.status(200).json(new ApiResponse(200, { customer, accessToken, refreshToken }, "Email verified successfully"));
+    const options = {
+        httpOnly: true,
+        secure: true
+    }
+
+    return res
+        .status(200)
+        .cookie("accessToken", accessToken, options)
+        .cookie("refreshToken", refreshToken, options)
+        .json(new ApiResponse(200, { customer, accessToken, refreshToken }, "Email verified successfully"));
 });
 
 const googleLoginCustomer = asyncHandler(async (req, res) => {
@@ -161,16 +198,31 @@ const registerCustomer = asyncHandler(async (req, res) => {
         throw new ApiError(409, "User with email already exists")
     }
 
-    const customer = await Customer.create({
-        fullName,
-        email,
-        password,
-        role: 3
-    })
+    // 1. Store Registration Data in Redis temporarily (15 mins)
+    await redisClient.setEx(
+        `signup:data:customer:${email}`, 
+        900, 
+        JSON.stringify({ fullName, email, password })
+    );
 
-    const createdUser = await Customer.findById(customer._id).select("-password -refreshToken")
+    // 2. Generate and Send OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    await redisClient.setEx(`otp:customer:${email}`, 900, otp);
 
-    return res.status(201).json(new ApiResponse(200, createdUser, "Registered successfully"))
+    try {
+        await sendEmail({
+            email,
+            subject: "Verify Your Catering Account",
+            message: `Hello ${fullName}! Thank you for joining CaterCraft. Your verification code is: ${otp}. Please verify your email to activate your account.`
+        });
+    } catch (error) {
+        console.error("❌ Customer Signup Email Error:", error);
+        // We continue because they can resend OTP later if needed
+    }
+
+    return res.status(200).json(
+        new ApiResponse(200, { email }, "Registration initiated. OTP sent to your email.")
+    );
 })
 
 const logoutCustomer = asyncHandler(async (req, res) => {
@@ -196,11 +248,39 @@ const logoutCustomer = asyncHandler(async (req, res) => {
         .json(new ApiResponse(200, {}, "Logged out successfully"))
 })
 
+const getCurrentCustomerProfile = asyncHandler(async (req, res) => {
+    const customer = await Customer.findById(req.user._id).select("-password -refreshToken");
+    
+    if (!customer) {
+        throw new ApiError(404, "Customer not found");
+    }
+
+    return res.status(200).json(new ApiResponse(200, customer, "Customer profile fetched successfully"));
+});
+
+const updateCustomerProfile = asyncHandler(async (req, res) => {
+    const { fullName } = req.body;
+    
+    if (!fullName) {
+        throw new ApiError(400, "FullName is required");
+    }
+
+    const customer = await Customer.findByIdAndUpdate(
+        req.user._id,
+        { $set: { fullName } },
+        { new: true }
+    ).select("-password -refreshToken");
+
+    return res.status(200).json(new ApiResponse(200, customer, "Profile updated successfully"));
+});
+
 export {
     loginCustomer,
     registerCustomer,
     logoutCustomer,
     sendOtpCustomer,
     verifyOtpCustomer,
-    googleLoginCustomer
+    googleLoginCustomer,
+    getCurrentCustomerProfile,
+    updateCustomerProfile
 }

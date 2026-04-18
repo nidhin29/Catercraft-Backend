@@ -5,7 +5,9 @@ import {
     logoutCustomer,
     sendOtpCustomer,
     verifyOtpCustomer,
-    googleLoginCustomer
+    googleLoginCustomer,
+    getCurrentCustomerProfile,
+    updateCustomerProfile
 } from "../controllers/customer.controller.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 
@@ -20,5 +22,7 @@ router.route("/google-login").post(googleLoginCustomer);
 
 // Protected routes
 router.route("/logout").post(verifyJWT, logoutCustomer);
+router.route("/profile").get(verifyJWT, getCurrentCustomerProfile);
+router.route("/update-profile").patch(verifyJWT, updateCustomerProfile);
 
 export default router;

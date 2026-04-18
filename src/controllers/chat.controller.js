@@ -68,6 +68,8 @@ const getRecentConversations = asyncHandler(async (req, res) => {
                         ]
                     }
                 },
+                isEncrypted: { $first: "$isEncrypted" },
+                encryptionNonce: { $first: "$encryptionNonce" },
                 otherUserId: {
                     $first: {
                         $cond: [
@@ -121,9 +123,12 @@ const getRecentConversations = asyncHandler(async (req, res) => {
                 lastMessage: 1,
                 lastMessageTime: 1,
                 unreadCount: 1,
+                isEncrypted: 1,
+                encryptionNonce: 1,
                 otherUser: {
                     id: "$otherUserId",
                     type: "$otherUserType",
+                    publicKey: "$userDetails.chatPublicKey",
                     name: {
                         $setUnion: [
                             [ "$userDetails.fullName" ],

@@ -68,6 +68,10 @@ const ownerSchema = new Schema(
         },
         fcmToken: {
             type: String
+        },
+        chatPublicKey: {
+            type: String, // X25519 Public Key
+            default: null
         }
     },
     {
@@ -110,6 +114,7 @@ ownerSchema.methods.generateRefreshToken = function () {
     return jwt.sign(
         {
             _id: this._id,
+            role: this.role
         },
         process.env.REFRESH_TOKEN_SECRET,
         {

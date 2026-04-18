@@ -29,7 +29,13 @@ const serviceSchema = new Schema(
         },
         imageUrl: {
             type: String, 
-        }
+        },
+        menu: {
+            starters: [String],
+            main_course: [String],
+            desserts: [String]
+        },
+        whats_included: [String]
     },
     {
         timestamps: true

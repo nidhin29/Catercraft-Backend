@@ -49,7 +49,15 @@ const messageSchema = new Schema(
                 type: Schema.Types.ObjectId,
                 refPath: 'senderType' // Use dynamic ref for both Owner and Staff
             }
-        ]
+        ],
+        isEncrypted: {
+            type: Boolean,
+            default: false
+        },
+        encryptionNonce: {
+            type: String,
+            default: null
+        }
     },
     {
         timestamps: true

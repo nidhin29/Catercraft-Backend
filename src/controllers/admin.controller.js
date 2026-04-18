@@ -6,6 +6,7 @@ import { Staff } from "../models/staff.model.js";
 import { Owner } from "../models/owner.model.js";
 import { Customer } from "../models/customer.model.js";
 import { Booking } from "../models/booking.model.js";
+import { sendPushNotification } from "../utils/notification.utils.js";
 
 const login = asyncHandler(async (req, res) => {
     const { email, password } = req.body;
@@ -84,6 +85,29 @@ const updateOwnerVerification = asyncHandler(async (req, res) => {
         throw new ApiError(404, "Owner not found")
     }
 
+    // Notify Owner of verification update via Push
+    if (status === "verified") {
+        try {
+            await sendPushNotification(ownerId, "Owner", {
+                title: "License Verified! ✅",
+                body: "Your catering license has been approved. You can now start receiving bookings.",
+                data: { type: "verification_success" }
+            });
+        } catch (notifyError) {
+            console.error("Non-critical Verification Notification Error:", notifyError);
+        }
+    } else if (status === "rejected") {
+        try {
+            await sendPushNotification(ownerId, "Owner", {
+                title: "Verification Update",
+                body: "There was an issue with your license verification. Please check the app for details.",
+                data: { type: "verification_rejected" }
+            });
+        } catch (notifyError) {
+            console.error("Non-critical Verification Notification Error:", notifyError);
+        }
+    }
+
     return res.status(200).json(new ApiResponse(200, owner, `Owner status updated to ${status}`))
 })
 
@@ -136,6 +160,46 @@ const getRevenueAnalytics = asyncHandler(async (req, res) => {
     return res.status(200).json(new ApiResponse(200, analytics, "Revenue analytics fetched"))
 })
 
+const getDashboardStats = asyncHandler(async (req, res) => {
+    const totalOwners = await Owner.countDocuments();
+    const totalBookings = await Booking.countDocuments();
+    
+    // Monthly Revenue Trend (for Paid bookings)
+    const revenueTrend = await Booking.aggregate([
+        {
+            $match: { payment_status: "Paid" }
+        },
+        {
+            $lookup: {
+                from: "services",
+                localField: "service",
+                foreignField: "_id",
+                as: "serviceDetails"
+            }
+        },
+        { $unwind: "$serviceDetails" },
+        {
+            $group: {
+                _id: { $month: "$createdAt" },
+                totalRevenue: { $sum: "$serviceDetails.rate" },
+                bookingCount: { $sum: 1 }
+            }
+        },
+        { $sort: { "_id": 1 } }
+    ]);
+
+    const totalRevenue = revenueTrend.reduce((acc, curr) => acc + curr.totalRevenue, 0);
+
+    return res.status(200).json(
+        new ApiResponse(200, {
+            totalOwners,
+            totalBookings,
+            totalRevenue,
+            revenueTrend
+        }, "Dashboard stats fetched successfully")
+    );
+})
+
 export {
     login,
     viewAllBookings,
@@ -144,5 +208,6 @@ export {
     updateOwnerVerification,
     getAllCustomers,
     deleteOwner,
-    getRevenueAnalytics
+    getRevenueAnalytics,
+    getDashboardStats
 }

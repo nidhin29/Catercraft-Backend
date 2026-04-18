@@ -7,7 +7,8 @@ import {
     updateOwnerVerification,
     getAllCustomers, 
     deleteOwner, 
-    getRevenueAnalytics 
+    getRevenueAnalytics,
+    getDashboardStats 
 } from "../controllers/admin.controller.js";
 import { verifyJWT, authorizeRoles } from "../middlewares/auth.middleware.js";
 
@@ -25,6 +26,9 @@ router.route("/pending-owners").get(getPendingOwners);
 router.route("/verify-owner/:ownerId").patch(updateOwnerVerification);
 router.route("/get_all_customers").get(getAllCustomers);
 router.route("/delete_owner").delete(deleteOwner);
+
+// Analytics & Dashboard
+router.route("/dashboard-stats").get(getDashboardStats);
 router.route("/analytics/revenue").get(getRevenueAnalytics);
 
 export default router;

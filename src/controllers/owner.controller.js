@@ -294,22 +294,41 @@ const addService = asyncHandler(async (req, res) => {
         throw new ApiError(403, "Your account is not verified. Please wait for admin approval before adding services.")
     }
 
-    const { name, rate, duration, description } = req.body;
+    const { name, rate, duration, description, service_group, menu_starters, menu_main, menu_desserts, whats_included } = req.body;
     const owner_email = req.user.email;
 
     let imageUrl = "";
     if (req.file) {
         const s3Result = await uploadToS3(req.file, "services", true);
-        imageUrl = s3Result.url; // Use original for now, thumbnails are handled by client if needed
+        imageUrl = s3Result.url; 
     }
+
+    // Parse list fields if they come as JSON strings or ensure they are arrays
+    const parseList = (val) => {
+        if (!val) return [];
+        if (Array.isArray(val)) return val;
+        try {
+            const parsed = JSON.parse(val);
+            return Array.isArray(parsed) ? parsed : [parsed];
+        } catch (e) {
+            return val.split(',').map(s => s.trim()).filter(s => s !== "");
+        }
+    };
 
     const service = await Service.create({
         service_name: name,
         rate,
         duration,
         description,
+        service_group,
         owner_email,
-        imageUrl
+        imageUrl,
+        menu: {
+            starters: parseList(menu_starters),
+            main_course: parseList(menu_main),
+            desserts: parseList(menu_desserts)
+        },
+        whats_included: parseList(whats_included)
     })
 
     return res.status(201).json(new ApiResponse(200, service, "Service added successfully"))

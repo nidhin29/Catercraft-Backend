@@ -83,7 +83,9 @@ io.on("connection", (socket) => {
         receiverType, 
         message, 
         room,
-        imageUrl = null
+        imageUrl = null,
+        isEncrypted = false,
+        encryptionNonce = null
     }) => {
         try {
             // 1. Persist to MongoDB
@@ -94,16 +96,28 @@ io.on("connection", (socket) => {
                 receiverType,
                 message,
                 room,
-                imageUrl
+                imageUrl,
+                isEncrypted,
+                encryptionNonce
             });
 
             // 2. Broadcast to the room (Real-time)
             io.to(room).emit("new_message", newMessage);
             
             // 3. Send Push Notification (Out-of-App)
+            let notificationBody = imageUrl ? "📷 Image" : (message.length > 50 ? message.substring(0, 47) + "..." : message);
+            
+            // Fetch Sender Public Key for background decryption on receiver's device
+            let sender = null;
+            if (senderType === "Owner") sender = await Owner.findById(senderId);
+            else sender = await Staff.findById(senderId);
+
             await sendPushNotification(receiverId, receiverType, {
-                title: `New Message from ${senderType}`,
-                body: imageUrl ? "📷 Image" : (message.length > 50 ? message.substring(0, 47) + "..." : message),
+                title: `New Message from ${sender?.companyName || sender?.fullName || senderType}`,
+                body: message, // Send the ACTUAL message (encrypted if isEncrypted is true)
+                isEncrypted,
+                nonce: encryptionNonce,
+                senderPublicKey: sender?.chatPublicKey,
                 data: {
                     type: "chat",
                     room: room,
@@ -111,7 +125,7 @@ io.on("connection", (socket) => {
                 }
             });
 
-            console.log(`✉️ Message from ${senderId} to ${receiverId} in room ${room}`);
+            console.log(`✉️ Message from ${senderId} to ${receiverId} in room ${room} ${isEncrypted ? "(🔒 E2EE)" : ""}`);
         } catch (error) {
             console.error("❌ Socket Error (send_message):", error);
         }
