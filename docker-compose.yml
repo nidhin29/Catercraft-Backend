@@ -7,9 +7,11 @@ services:
       - .env
     environment:
       - REDIS_URL=redis://redis:6379
+      - RABBITMQ_URL=amqp://admin:Godgreat29@@rabbitmq:5672
     command: npm run dev
     depends_on:
       - redis
+      - rabbitmq
     restart: always
     develop:
       watch:
@@ -30,3 +32,12 @@ services:
     ports:
       - "6379:6379"
 
+  # RabbitMQ with Management UI
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"   # AMQP protocol port
+      - "15672:15672" # Management UI port
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: Godgreat29@

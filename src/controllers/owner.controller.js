@@ -6,7 +6,7 @@ import { Staff } from "../models/staff.model.js";
 import { Service } from "../models/service.model.js";
 import { uploadToS3 } from "../utils/s3Upload.js";
 import { redisClient } from "../db/redis.js";
-import { sendEmail } from "../utils/sendEmail.js";
+import { publishToQueue } from "../config/rabbitmq.js";
 import { OAuth2Client } from "google-auth-library";
 
 const generateAccessAndRefreshToken = async (ownerId) => {
@@ -71,13 +71,13 @@ const sendOtpOwner = asyncHandler(async (req, res) => {
     await redisClient.setEx(`otp:owner:${email}`, 900, otp.toString());
 
     try {
-        await sendEmail({
+        await publishToQueue('email_queue', {
             email,
             subject: "Your Catering Owner Verification OTP",
             message: `Your verification code is ${otp}. It will expire in 15 minutes.`
         });
     } catch (error) {
-        throw new ApiError(500, "Failed to send OTP email");
+        console.error("❌ RabbitMQ OTP Publish Error:", error);
     }
 
     return res.status(200).json(new ApiResponse(200, null, "OTP sent successfully"));
@@ -273,7 +273,7 @@ const registerOwner = asyncHandler(async (req, res) => {
     await redisClient.set(`otp:owner:${email}`, otp, { EX: 900 });
 
     try {
-        await sendEmail({
+        await publishToQueue('email_queue', {
             email,
             subject: "Verify Your Catering Account",
             message: `Hello ${name}! Your registration was successful. Your verification code is: ${otp}. Please verify your email to activate your account.`
@@ -466,7 +466,7 @@ const addStaff = asyncHandler(async (req, res) => {
 
     // 3. Send Welcome Email
     try {
-        await sendEmail({
+        await publishToQueue('email_queue', {
             email: staff.email,
             subject: `Welcome to ${owner.companyName}!`,
             message: `Hello ${staff.fullName},\n\nYou have been added as a ${staff.designation} at ${owner.companyName}.\n\nYou can now log in to the Staff App using:\nEmail: ${staff.email}\nPassword: ${password}\n\nPlease change your password after logging in for the first time.`

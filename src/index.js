@@ -4,11 +4,15 @@ import dotenv from "dotenv"
 import { connectDB } from "./db/index.js"
 import { app } from "./app.js"
 import { redisClient, connectRedis } from "./db/redis.js";
+import { connectRabbitMQ } from "./config/rabbitmq.js";
+import { setupWorkers } from "./workers/notification.worker.js";
 import { createServer } from "http";
 import { Server } from "socket.io";
 
 import { Message } from "./models/message.model.js";
-import { sendPushNotification } from "./utils/notification.utils.js";
+import { Owner } from "./models/owner.model.js";
+import { Staff } from "./models/staff.model.js";
+import { publishToQueue } from "./config/rabbitmq.js";
 
 dotenv.config(
     {
@@ -112,16 +116,20 @@ io.on("connection", (socket) => {
             if (senderType === "Owner") sender = await Owner.findById(senderId);
             else sender = await Staff.findById(senderId);
 
-            await sendPushNotification(receiverId, receiverType, {
-                title: `New Message from ${sender?.companyName || sender?.fullName || senderType}`,
-                body: message, // Send the ACTUAL message (encrypted if isEncrypted is true)
-                isEncrypted,
-                nonce: encryptionNonce,
-                senderPublicKey: sender?.chatPublicKey,
-                data: {
-                    type: "chat",
-                    room: room,
-                    senderId: senderId.toString()
+            await publishToQueue('push_queue', {
+                userId: receiverId,
+                userType: receiverType,
+                payload: {
+                    title: `New Message from ${sender?.companyName || sender?.fullName || senderType}`,
+                    body: message,
+                    isEncrypted,
+                    nonce: encryptionNonce,
+                    senderPublicKey: sender?.chatPublicKey,
+                    data: {
+                        type: "chat",
+                        room: room,
+                        senderId: senderId.toString()
+                    }
                 }
             });
 
@@ -151,15 +159,18 @@ io.on("connection", (socket) => {
 });
 
 
-Promise.all([connectDB(), connectRedis()])
+Promise.all([connectDB(), connectRedis(), connectRabbitMQ()])
     .then(() => {    
+        // Initialize Background Workers
+        setupWorkers();
+
         // IMPORTANT: Use httpServer.listen instead of app.listen!
         httpServer.listen(process.env.PORT || 8000, () => {
             console.log(`Server is running on port ${process.env.PORT}`);
         });
     })
     .catch((err) => {
-        console.error("Database connection error: ", err);
+        console.error("Server initialization error: ", err);
         process.exit(1);
     });
 

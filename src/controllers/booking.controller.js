@@ -5,8 +5,7 @@ import { Service } from "../models/service.model.js";
 import { Booking } from "../models/booking.model.js";
 import { Owner } from "../models/owner.model.js";
 import { Staff } from "../models/staff.model.js";
-import { sendPushNotification } from "../utils/notification.utils.js";
-import { sendEmail } from "../utils/sendEmail.js";
+import { publishToQueue } from "../config/rabbitmq.js";
 import Razorpay from "razorpay";
 
 const viewAllServices = asyncHandler(async (req, res) => {
@@ -129,7 +128,7 @@ const updateBookingStatus = asyncHandler(async (req, res) => {
     if (normalizedStatus === "Approved") {
         try {
             const bookingForEmail = await Booking.findById(booking_id).populate("service");
-            await sendEmail({
+            await publishToQueue('email_queue', {
                 email: booking.customer_email,
                 subject: "Booking Approved! | CaterCraft",
                 message: `Hello,\n\nYour booking for ${bookingForEmail.service.service_name} has been approved. You can now complete your payment through the customer dashboard.\n\nThank you for choosing CaterCraft!`
@@ -196,14 +195,18 @@ const assignStaffToBooking = asyncHandler(async (req, res) => {
         }
         
         // FCM Push Notification
-        sendPushNotification(staffId, "Staff", {
-            title: "New Assignment",
-            body: `You have been assigned to a new task: ${booking.service?.service_name || 'Event Assignment'}`,
-            data: { 
-                booking_id: booking._id?.toString(),
-                type: "assignment"
+        publishToQueue('push_queue', {
+            userId: staffId, 
+            userType: "Staff", 
+            payload: {
+                title: "New Assignment",
+                body: `You have been assigned to a new task: ${booking.service?.service_name || 'Event Assignment'}`,
+                data: { 
+                    booking_id: booking._id?.toString(),
+                    type: "assignment"
+                }
             }
-        });
+        }).catch(err => console.error("RabbitMQ Push Error:", err));
     });
 
     return res.status(200).json(

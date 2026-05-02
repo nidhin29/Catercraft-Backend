@@ -3,7 +3,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { Booking } from "../models/booking.model.js";
 import { Owner } from "../models/owner.model.js";
-import { sendPushNotification } from "../utils/notification.utils.js";
+import { publishToQueue } from "../config/rabbitmq.js";
 import Razorpay from "razorpay";
 import crypto from "crypto";
 
@@ -86,12 +86,16 @@ const verifyPayment = asyncHandler(async (req, res) => {
         try {
             const owner = await Owner.findOne({ email: booking.owner_email });
             if (owner) {
-                await sendPushNotification(owner._id, "Owner", {
-                    title: "Payment Received! 💰",
-                    body: `Customer paid ₹${total} for ${booking.service?.service_name || 'Booking'}.`,
-                    data: {
-                        booking_id: booking._id.toString(),
-                        type: "payment_received"
+                await publishToQueue('push_queue', {
+                    userId: owner._id, 
+                    userType: "Owner", 
+                    payload: {
+                        title: "Payment Received! 💰",
+                        body: `Customer paid ₹${total} for ${booking.service?.service_name || 'Booking'}.`,
+                        data: {
+                            booking_id: booking._id.toString(),
+                            type: "payment_received"
+                        }
                     }
                 });
             }

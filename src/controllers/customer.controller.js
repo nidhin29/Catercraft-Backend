@@ -3,7 +3,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { Customer } from "../models/customer.model.js";
 import { redisClient } from "../db/redis.js";
-import { sendEmail } from "../utils/sendEmail.js";
+import { publishToQueue } from "../config/rabbitmq.js";
 import { OAuth2Client } from "google-auth-library";
 import jwt from "jsonwebtoken";
 
@@ -77,13 +77,13 @@ const sendOtpCustomer = asyncHandler(async (req, res) => {
     await redisClient.setEx(`otp:customer:${email}`, 900, otp);
 
     try {
-        await sendEmail({
+        await publishToQueue('email_queue', {
             email,
             subject: "Your Catering Verification OTP",
             message: `Your verification code is ${otp}. It will expire in 15 minutes.`
         });
     } catch (error) {
-        throw new ApiError(500, "Failed to send OTP email");
+        console.error("❌ RabbitMQ OTP Publish Error:", error);
     }
 
     return res.status(200).json(new ApiResponse(200, null, "OTP sent successfully"));
@@ -210,7 +210,7 @@ const registerCustomer = asyncHandler(async (req, res) => {
     await redisClient.setEx(`otp:customer:${email}`, 900, otp);
 
     try {
-        await sendEmail({
+        await publishToQueue('email_queue', {
             email,
             subject: "Verify Your Catering Account",
             message: `Hello ${fullName}! Thank you for joining CaterCraft. Your verification code is: ${otp}. Please verify your email to activate your account.`
