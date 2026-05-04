@@ -3,6 +3,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { Review } from "../models/review.model.js";
 import { Booking } from "../models/booking.model.js";
+import { Owner } from "../models/owner.model.js";
 
 const addReview = asyncHandler(async (req, res) => {
     const { booking_id, rating, message } = req.body;
@@ -18,8 +19,8 @@ const addReview = asyncHandler(async (req, res) => {
     }
 
     // Only allow reviews for completed and paid bookings
-    if (booking.work_status !== "Completed" || booking.payment_status !== "Paid") {
-        throw new ApiError(400, "You can only review completed and paid bookings");
+    if (booking.work_status !== "Finished" || booking.payment_status !== "Paid") {
+        throw new ApiError(400, "You can only review finished and paid bookings");
     }
 
     // Check if review already exists
@@ -28,10 +29,16 @@ const addReview = asyncHandler(async (req, res) => {
         throw new ApiError(409, "You have already reviewed this service");
     }
 
+    // Find the owner by their email
+    const owner = await Owner.findOne({ email: booking.service.owner_email });
+    if (!owner) {
+        throw new ApiError(404, "Owner not found for this service");
+    }
+
     const review = await Review.create({
         customer: customerId,
         service: booking.service._id,
-        owner: booking.service.owner_email, // We store owner's email for easy lookup or we can find owner by email
+        owner: owner._id,
         rating,
         message
     });
