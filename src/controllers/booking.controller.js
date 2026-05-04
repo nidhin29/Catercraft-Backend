@@ -36,10 +36,30 @@ const bookService = asyncHandler(async (req, res) => {
 
     // Real-time notification to owner
     const io = req.app.get("io")
-    io.emit(`new_booking_${service.owner_email}`, {
-        message: "New booking received!",
-        booking_id: booking._id
-    })
+    if (io) {
+        // Emit to targeted room
+        io.to(`owner_${service.owner_email}`).emit(`new_booking_${service.owner_email}`, {
+            message: "New booking received!",
+            booking_id: booking._id
+        })
+    }
+
+    // Push Notification via RabbitMQ
+    const owner = await Owner.findOne({ email: service.owner_email });
+    if (owner) {
+        publishToQueue('push_queue', {
+            userId: owner._id,
+            userType: "Owner",
+            payload: {
+                title: "New Booking Request",
+                body: `You have received a new catering request for ${service.service_name}`,
+                data: {
+                    type: "new_booking",
+                    booking_id: booking._id?.toString()
+                }
+            }
+        }).catch(err => console.error("RabbitMQ Push Error (new_booking):", err));
+    }
 
     return res.status(201).json(new ApiResponse(200, booking, "Service booked successfully"))
 })
