@@ -272,6 +272,7 @@ const getStaffTasks = asyncHandler(async (req, res) => {
         assignedStaff: req.user._id
     })
     .populate("service")
+    .populate("assignedStaff", "fullName email role profileImageThumbnail")
     .sort({ datetime: 1 });
 
     return res.status(200).json(
