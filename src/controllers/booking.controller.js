@@ -121,7 +121,7 @@ const updateBookingStatus = asyncHandler(async (req, res) => {
 
     // Update Status with Normalization
     let normalizedStatus = new_status === "Accepted" ? "Approved" : new_status;
-    if (normalizedStatus === "Completed") normalizedStatus = "Finished";
+    if (normalizedStatus === "Finished") normalizedStatus = "Completed";
     
     booking.work_status = normalizedStatus;
     await booking.save();
