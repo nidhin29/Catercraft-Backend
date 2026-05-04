@@ -12,7 +12,8 @@ import {
     getOwnerServices,
     getOwnerDetails,
     updateOwnerProfile,
-    addStaff
+    addStaff,
+    refreshAccessToken
 } from "../controllers/owner.controller.js";
 import { upload } from "../middlewares/multer.middleware.js";
 import { verifyJWT, authorizeRoles } from "../middlewares/auth.middleware.js";
@@ -31,6 +32,7 @@ router.route("/register-owner").post(
 router.route("/send-otp").post(sendOtpOwner);
 router.route("/verify-otp").post(verifyOtpOwner);
 router.route("/google-login").post(googleLoginOwner);
+router.route("/refresh-token").post(refreshAccessToken);
 router.route("/google-register").post(
     upload.fields([
         { name: "license", maxCount: 1 },
