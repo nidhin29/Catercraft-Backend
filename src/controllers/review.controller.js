@@ -19,8 +19,8 @@ const addReview = asyncHandler(async (req, res) => {
     }
 
     // Only allow reviews for completed and paid bookings
-    if (booking.work_status !== "Finished" || booking.payment_status !== "Paid") {
-        throw new ApiError(400, "You can only review finished and paid bookings");
+    if (booking.work_status !== "Completed" || booking.payment_status !== "Paid") {
+        throw new ApiError(400, "You can only review completed and paid bookings");
     }
 
     // Check if review already exists
