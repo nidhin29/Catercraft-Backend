@@ -68,10 +68,11 @@ const sendPushNotification = async (userId, userType, payload) => {
         }
 
         const response = await admin.messaging().send(message);
-        console.log("🔔 Push Notification Sent Successfully:", response);
+        console.log(`✅ Push Notification Sent! Message ID: ${response} | User: ${userId} (${userType})`);
         return response;
     } catch (error) {
-        console.error("❌ Firebase Send Error:", error);
+        console.error(`❌ Firebase Send Error for User ${userId}:`, error.message);
+        if (error.code) console.error(`Error Code: ${error.code}`);
         return null;
     }
 };

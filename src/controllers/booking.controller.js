@@ -45,20 +45,29 @@ const bookService = asyncHandler(async (req, res) => {
     }
 
     // Push Notification via RabbitMQ
+    console.log(`🔍 Notifying Owner for new booking. Owner Email: ${service.owner_email}`);
     const owner = await Owner.findOne({ email: service.owner_email });
+    
     if (owner) {
-        publishToQueue('push_queue', {
-            userId: owner._id,
-            userType: "Owner",
-            payload: {
-                title: "New Booking Request",
-                body: `You have received a new catering request for ${service.service_name}`,
-                data: {
-                    type: "new_booking",
-                    booking_id: booking._id?.toString()
+        if (owner.fcmToken) {
+            console.log(`📡 Publishing push notification task for Owner ID: ${owner._id}`);
+            publishToQueue('push_queue', {
+                userId: owner._id,
+                userType: "Owner",
+                payload: {
+                    title: "New Booking Request",
+                    body: `You have received a new catering request for ${service.service_name}`,
+                    data: {
+                        type: "new_booking",
+                        booking_id: booking._id?.toString()
+                    }
                 }
-            }
-        }).catch(err => console.error("RabbitMQ Push Error (new_booking):", err));
+            }).catch(err => console.error("❌ RabbitMQ Push Error (new_booking):", err));
+        } else {
+            console.log(`⚠️  Owner ${owner.email} found, but has NO fcmToken. Push skipped.`);
+        }
+    } else {
+        console.log(`❌ No Owner found with email: ${service.owner_email}`);
     }
 
     return res.status(201).json(new ApiResponse(200, booking, "Service booked successfully"))
