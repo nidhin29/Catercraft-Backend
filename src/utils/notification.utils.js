@@ -1,17 +1,18 @@
+import path from "path";
 import admin from "firebase-admin";
 import { Owner } from "../models/owner.model.js";
 import { Staff } from "../models/staff.model.js";
 
 // Initialize Firebase Admin (Wrapped in try-catch to avoid crashing if file is missing)
 try {
-    // If you haven't placed the file yet, this will fail gracefully
-    // Standard path would be src/config/serviceAccountKey.json
+    const serviceAccountPath = path.resolve(process.cwd(), "src/config/serviceAccountKey.json");
     admin.initializeApp({
-        credential: admin.credential.cert("./src/config/serviceAccountKey.json")
+        credential: admin.credential.cert(serviceAccountPath)
     });
     console.log("✅ Firebase Admin Initialized");
 } catch (error) {
     console.log("⚠️ Firebase Admin not initialized (Missing serviceAccountKey.json)");
+    console.error("Error details:", error.message);
 }
 
 /**
