@@ -4,7 +4,9 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { Service } from "../models/service.model.js";
 import { Booking } from "../models/booking.model.js";
 import { Owner } from "../models/owner.model.js";
+import { Customer } from "../models/customer.model.js";
 import { Staff } from "../models/staff.model.js";
+import { Review } from "../models/review.model.js";
 import { publishToQueue } from "../config/rabbitmq.js";
 import Razorpay from "razorpay";
 
@@ -57,7 +59,27 @@ const viewUserBookings = asyncHandler(async (req, res) => {
         ]
     }).populate("service").populate("assignedStaff", "fullName email role profileImageThumbnail");
 
-    return res.status(200).json(new ApiResponse(200, bookings, "Bookings fetched successfully"))
+    // Check if each booking has been reviewed
+    // First, identify the actual customer ID if we are looking for customer bookings
+    let actualCustomerId = req.user?._id;
+    if (!actualCustomerId && email) {
+        const customer = await Customer.findOne({ email });
+        if (customer) actualCustomerId = customer._id;
+    }
+
+    const bookingsWithReviewStatus = await Promise.all(bookings.map(async (booking) => {
+        const isReviewed = actualCustomerId ? await Review.exists({ 
+            customer: actualCustomerId, 
+            service: booking.service?._id 
+        }) : false;
+
+        return {
+            ...booking._doc,
+            isReviewed: !!isReviewed
+        };
+    }));
+
+    return res.status(200).json(new ApiResponse(200, bookingsWithReviewStatus, "Bookings fetched successfully"))
 })
 
 const generateRazorpayOrder = asyncHandler(async (req, res) => {
